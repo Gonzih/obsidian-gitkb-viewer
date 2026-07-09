@@ -11,6 +11,7 @@ documents.
 - GitKB Explorer side pane powered by `git-kb list --json`
 - Search UI powered by `git-kb search <query> --json`
 - Readonly document view powered by `git-kb show <slug> --json`
+- All-KB graph view powered by `git-kb graph <slug...> --json`
 - `[[slug]]` wikilinks open readonly GitKB document views
 - Copy slug, wikilink, and raw markdown
 - Manual refresh plus optional auto-refresh
@@ -24,7 +25,7 @@ The plugin uses an explicit command allowlist. It only runs:
 - `git-kb show <slug> --json`
 - `git-kb search <query> --json`
 - `git-kb board --json`
-- `git-kb graph <slug> --json`
+- `git-kb graph <slug...> --json`
 - `git-kb --version`
 
 It never calls `checkout`, `commit`, `create`, `set`, `rm`, `mv`, `reset`,

@@ -130,3 +130,246 @@
   margin-right: 6px;
   padding: 2px 8px;
 }
+
+.gitkb-graph-root {
+  --gitkb-panel: color-mix(in srgb, var(--background-primary) 86%, var(--background-secondary));
+  --gitkb-graph-line: color-mix(in srgb, var(--text-muted) 30%, transparent);
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--background-modifier-border) 18%, transparent) 1px, transparent 1px),
+    linear-gradient(0deg, color-mix(in srgb, var(--background-modifier-border) 18%, transparent) 1px, transparent 1px),
+    radial-gradient(circle at 28% 20%, color-mix(in srgb, #59c3b0 12%, transparent), transparent 32%),
+    radial-gradient(circle at 70% 72%, color-mix(in srgb, #d6a84f 10%, transparent), transparent 36%),
+    var(--background-primary);
+  background-size: 28px 28px, 28px 28px, auto, auto, auto;
+  color: var(--text-normal);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+
+.gitkb-graph-topbar {
+  align-items: end;
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(280px, 1fr);
+  padding: 14px 16px 12px;
+}
+
+.gitkb-graph-kicker {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.gitkb-graph-heading {
+  color: var(--text-normal);
+  font-size: 22px;
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+.gitkb-graph-controls {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(160px, 1fr) auto auto;
+}
+
+.gitkb-graph-body {
+  display: grid;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  min-height: 0;
+}
+
+.gitkb-graph-stage {
+  min-height: 0;
+  overflow: hidden;
+  position: relative;
+}
+
+.gitkb-graph-svg {
+  cursor: grab;
+  display: block;
+  height: 100%;
+  touch-action: none;
+  width: 100%;
+}
+
+.gitkb-graph-svg:active {
+  cursor: grabbing;
+}
+
+.gitkb-graph-side {
+  background: color-mix(in srgb, var(--background-secondary) 68%, transparent);
+  border-left: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  overflow: auto;
+  padding: 12px;
+}
+
+.gitkb-graph-panel,
+.gitkb-graph-legend {
+  background: var(--gitkb-panel);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--background-primary) 55%, transparent);
+  padding: 10px;
+}
+
+.gitkb-graph-panel-title {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.gitkb-graph-stats {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.gitkb-graph-stat {
+  border-left: 2px solid color-mix(in srgb, #59c3b0 75%, var(--background-modifier-border));
+  padding-left: 8px;
+}
+
+.gitkb-graph-stat-value {
+  font-size: 20px;
+  font-weight: 750;
+  line-height: 1;
+}
+
+.gitkb-graph-stat-label,
+.gitkb-graph-hint,
+.gitkb-graph-detail-slug {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.gitkb-graph-edge {
+  opacity: 0.34;
+  pointer-events: none;
+  stroke: var(--gitkb-graph-line);
+  stroke-linecap: round;
+  stroke-width: 1.1;
+  transition: opacity 120ms ease;
+}
+
+.gitkb-graph-edge[data-rel="blocks"],
+.gitkb-graph-edge[data-rel="blocked_by"] {
+  stroke: #e66b5b;
+}
+
+.gitkb-graph-edge[data-rel="implements"] {
+  stroke: #d6a84f;
+}
+
+.gitkb-graph-node {
+  cursor: pointer;
+  filter: drop-shadow(0 2px 5px color-mix(in srgb, var(--background-primary) 80%, transparent));
+  opacity: 0.92;
+  stroke: color-mix(in srgb, var(--background-primary) 80%, white);
+  stroke-width: 1.4;
+  transition: opacity 120ms ease, stroke-width 120ms ease, filter 120ms ease;
+}
+
+.gitkb-graph-node:hover,
+.gitkb-graph-node.is-hovered {
+  filter: drop-shadow(0 0 8px color-mix(in srgb, white 52%, transparent));
+  opacity: 1;
+  stroke: var(--text-normal);
+  stroke-width: 2.2;
+}
+
+.gitkb-graph-node.is-selected {
+  filter: drop-shadow(0 0 12px color-mix(in srgb, #d6a84f 65%, transparent));
+  stroke: #d6a84f;
+  stroke-width: 3;
+}
+
+.gitkb-graph-node.is-dimmed,
+.gitkb-graph-edge.is-dimmed {
+  opacity: 0.08;
+}
+
+.gitkb-graph-node.is-matched {
+  opacity: 1;
+  stroke: #ffffff;
+  stroke-width: 2.4;
+}
+
+.gitkb-graph-label {
+  fill: var(--text-normal);
+  font-size: 11px;
+  font-weight: 650;
+  paint-order: stroke;
+  pointer-events: none;
+  stroke: var(--background-primary);
+  stroke-linejoin: round;
+  stroke-width: 4px;
+}
+
+.gitkb-graph-detail-title {
+  font-size: var(--font-ui-medium);
+  font-weight: var(--font-semibold);
+  line-height: 1.25;
+  margin-bottom: 4px;
+}
+
+.gitkb-graph-detail-meta {
+  margin: 10px 0;
+}
+
+.gitkb-graph-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gitkb-graph-legend {
+  display: grid;
+  gap: 7px;
+}
+
+.gitkb-graph-legend-item {
+  align-items: center;
+  color: var(--text-muted);
+  display: grid;
+  font-size: var(--font-ui-smaller);
+  gap: 8px;
+  grid-template-columns: 12px minmax(0, 1fr);
+}
+
+.gitkb-graph-swatch {
+  border-radius: 50%;
+  display: inline-block;
+  height: 10px;
+  width: 10px;
+}
+
+@media (max-width: 820px) {
+  .gitkb-graph-topbar,
+  .gitkb-graph-body {
+    grid-template-columns: 1fr;
+  }
+
+  .gitkb-graph-body {
+    grid-template-rows: minmax(360px, 1fr) auto;
+  }
+
+  .gitkb-graph-side {
+    border-left: 0;
+    border-top: 1px solid var(--background-modifier-border);
+    max-height: 260px;
+  }
+}
