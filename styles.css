@@ -192,7 +192,8 @@
   position: relative;
 }
 
-.gitkb-graph-svg {
+.gitkb-graph-svg,
+.gitkb-graph-canvas {
   cursor: grab;
   display: block;
   height: 100%;
@@ -200,8 +201,13 @@
   width: 100%;
 }
 
-.gitkb-graph-svg:active {
+.gitkb-graph-svg:active,
+.gitkb-graph-canvas:active {
   cursor: grabbing;
+}
+
+.gitkb-graph-canvas.is-hovering-node {
+  cursor: pointer;
 }
 
 .gitkb-graph-side {

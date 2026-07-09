@@ -135,12 +135,24 @@ class GitKbClient {
   async allGraph(): Promise<GitKbMergedGraph> {
     const documents = await this.list();
     const slugs = documents.map((doc) => doc.slug).filter(Boolean);
-    const responses: GitKbGraphResponse[] = [];
+    if (slugs.length === 0) {
+      return { nodes: [], edges: [], documentCount: 0 };
+    }
+    for (const slug of slugs) {
+      this.rejectFlagLikeValue(slug, "slug");
+    }
 
-    for (const chunk of chunkArray(slugs, 80)) {
-      for (const slug of chunk) {
-        this.rejectFlagLikeValue(slug, "slug");
+    try {
+      const response = (await this.runJson(["graph", ...slugs, "--json"])) as GitKbGraphResponse;
+      return mergeGraphResponses(documents, [response]);
+    } catch (error) {
+      if (!(error instanceof GitKbReadonlyError) || !error.message.includes("spawn E2BIG")) {
+        throw error;
       }
+    }
+
+    const responses: GitKbGraphResponse[] = [];
+    for (const chunk of chunkArray(slugs, 250)) {
       responses.push((await this.runJson(["graph", ...chunk, "--json"])) as GitKbGraphResponse);
     }
 
@@ -837,6 +849,8 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 
 class GitKbGraphView extends ItemView {
   private graphRoot: HTMLElement | null = null;
+  private canvas: HTMLCanvasElement | null = null;
+  private ctx: CanvasRenderingContext2D | null = null;
   private svg: SVGSVGElement | null = null;
   private viewport: SVGGElement | null = null;
   private edgeLayer: SVGGElement | null = null;
@@ -850,6 +864,7 @@ class GitKbGraphView extends ItemView {
   private edges: ForceEdge[] = [];
   private nodeById = new Map<string, ForceNode>();
   private edgeByKey = new Map<string, ForceEdge>();
+  private matchedNodeIds = new Set<string>();
   private selectedNode: ForceNode | null = null;
   private hoveredNode: ForceNode | null = null;
   private draggedNode: ForceNode | null = null;
@@ -915,21 +930,12 @@ class GitKbGraphView extends ItemView {
 
     const body = this.graphRoot.createDiv({ cls: "gitkb-graph-body" });
     const stage = body.createDiv({ cls: "gitkb-graph-stage" });
-    this.svg = document.createElementNS(SVG_NS, "svg");
-    this.svg.addClass("gitkb-graph-svg");
-    stage.appendChild(this.svg);
+    this.canvas = document.createElement("canvas");
+    this.canvas.addClass("gitkb-graph-canvas");
+    stage.appendChild(this.canvas);
+    this.ctx = this.canvas.getContext("2d");
 
-    this.viewport = document.createElementNS(SVG_NS, "g");
-    this.edgeLayer = document.createElementNS(SVG_NS, "g");
-    this.nodeLayer = document.createElementNS(SVG_NS, "g");
-    this.labelLayer = document.createElementNS(SVG_NS, "g");
-    this.edgeLayer.addClass("gitkb-graph-edges");
-    this.nodeLayer.addClass("gitkb-graph-nodes");
-    this.labelLayer.addClass("gitkb-graph-labels");
-    this.viewport.append(this.edgeLayer, this.nodeLayer, this.labelLayer);
-    this.svg.appendChild(this.viewport);
-
-    this.registerGraphEvents();
+    this.registerCanvasEvents();
 
     const side = body.createDiv({ cls: "gitkb-graph-side" });
     this.statsEl = side.createDiv({ cls: "gitkb-graph-panel" });
@@ -945,16 +951,14 @@ class GitKbGraphView extends ItemView {
   }
 
   private async loadGraph(): Promise<void> {
-    if (!this.graphRoot || !this.edgeLayer || !this.nodeLayer || !this.labelLayer) {
+    if (!this.graphRoot || !this.canvas || !this.ctx) {
       return;
     }
 
     this.stopSimulation();
-    this.edgeLayer.empty();
-    this.nodeLayer.empty();
-    this.labelLayer.empty();
     this.selectedNode = null;
     this.hoveredNode = null;
+    this.matchedNodeIds = new Set();
     if (this.statsEl) {
       renderLoading(this.statsEl, "Loading all GitKB relationships...");
     }
@@ -967,10 +971,8 @@ class GitKbGraphView extends ItemView {
       const graph = await this.plugin.client.allGraph();
       this.prepareGraph(graph);
       this.renderStats(graph);
-      this.renderSvgGraph();
       this.fitGraph();
-      this.ticksRemaining = this.nodes.length > 650 ? 180 : 320;
-      this.startSimulation();
+      this.drawCanvasGraph();
     } catch (error) {
       if (this.statsEl) {
         renderError(this.statsEl, error);
@@ -996,25 +998,46 @@ class GitKbGraphView extends ItemView {
       });
     });
 
-    this.nodes = graph.nodes.map((node) => {
+    const byType = new Map<string, GitKbGraphNode[]>();
+    for (const node of graph.nodes) {
       const type = node.type || "document";
+      const group = byType.get(type) ?? [];
+      group.push(node);
+      byType.set(type, group);
+    }
+    for (const group of byType.values()) {
+      group.sort((a, b) => (degree.get(b.id) ?? 0) - (degree.get(a.id) ?? 0) || a.slug.localeCompare(b.slug));
+    }
+
+    const positioned: ForceNode[] = [];
+    for (const [type, group] of byType.entries()) {
       const cluster = typeCluster.get(type) ?? { x: 0, y: 0 };
-      const seed = hashString(node.slug);
-      const angle = ((seed % 360) / 360) * Math.PI * 2;
-      const orbit = 45 + (seed % 180);
-      const nodeDegree = degree.get(node.id) ?? 0;
-      return {
-        ...node,
-        x: cluster.x + Math.cos(angle) * orbit,
-        y: cluster.y + Math.sin(angle) * orbit,
-        vx: 0,
-        vy: 0,
-        radius: Math.min(16, 4.5 + Math.sqrt(nodeDegree + 1) * 1.9),
-        degree: nodeDegree,
-        clusterX: cluster.x,
-        clusterY: cluster.y
-      };
-    });
+      const ringGap = 32;
+      const firstRing = 28;
+      group.forEach((node, index) => {
+        const ring = Math.floor(Math.sqrt(index + 1));
+        const ringStart = ring * ring;
+        const ringSlots = Math.max(1, (ring + 1) * (ring + 1) - ringStart);
+        const slot = index - ringStart;
+        const seed = hashString(node.slug);
+        const angle = (Math.PI * 2 * slot) / ringSlots + ((seed % 19) - 9) * 0.006;
+        const orbit = firstRing + ring * ringGap;
+        const nodeDegree = degree.get(node.id) ?? 0;
+        positioned.push({
+          ...node,
+          x: cluster.x + Math.cos(angle) * orbit,
+          y: cluster.y + Math.sin(angle) * orbit,
+          vx: 0,
+          vy: 0,
+          radius: Math.min(15, 3.8 + Math.sqrt(nodeDegree + 1) * 1.55),
+          degree: nodeDegree,
+          clusterX: cluster.x,
+          clusterY: cluster.y
+        });
+      });
+    }
+
+    this.nodes = positioned.sort((a, b) => b.degree - a.degree || a.slug.localeCompare(b.slug));
 
     this.nodeById = new Map(this.nodes.map((node) => [node.id, node]));
     this.edges = graph.edges
@@ -1047,6 +1070,199 @@ class GitKbGraphView extends ItemView {
     const item = container.createDiv({ cls: "gitkb-graph-stat" });
     item.createDiv({ cls: "gitkb-graph-stat-value", text: value });
     item.createDiv({ cls: "gitkb-graph-stat-label", text: label });
+  }
+
+  private drawCanvasGraph(): void {
+    if (!this.canvas || !this.ctx) {
+      return;
+    }
+
+    const rect = this.canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    const width = Math.max(1, Math.floor(rect.width));
+    const height = Math.max(1, Math.floor(rect.height));
+    if (this.canvas.width !== Math.floor(width * dpr) || this.canvas.height !== Math.floor(height * dpr)) {
+      this.canvas.width = Math.floor(width * dpr);
+      this.canvas.height = Math.floor(height * dpr);
+    }
+
+    const ctx = this.ctx;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = getComputedStyle(this.canvas).getPropertyValue("--background-primary") || "transparent";
+
+    const query = this.searchInput?.getValue().trim() ?? "";
+    const hasFilter = query.length > 0;
+    const isNodeVisible = (id: string) => !hasFilter || this.matchedNodeIds.has(id);
+
+    ctx.save();
+    ctx.translate(this.panX, this.panY);
+    ctx.scale(this.scale, this.scale);
+
+    ctx.lineCap = "round";
+    for (const edge of this.edges) {
+      const visible = isNodeVisible(edge.from) && isNodeVisible(edge.to);
+      if (!visible && hasFilter) {
+        ctx.globalAlpha = 0.035;
+      } else {
+        ctx.globalAlpha = edge.rel_type === "blocks" || edge.rel_type === "blocked_by" ? 0.34 : 0.18;
+      }
+      ctx.strokeStyle = colorForRelation(edge.rel_type);
+      ctx.lineWidth = Math.max(0.55, 1.05 / Math.sqrt(this.scale));
+      ctx.beginPath();
+      ctx.moveTo(edge.source.x, edge.source.y);
+      ctx.lineTo(edge.target.x, edge.target.y);
+      ctx.stroke();
+    }
+
+    const sortedNodes = [...this.nodes].sort((a, b) => a.radius - b.radius);
+    for (const node of sortedNodes) {
+      const matched = isNodeVisible(node.id);
+      ctx.globalAlpha = hasFilter && !matched ? 0.1 : 0.94;
+      ctx.fillStyle = colorForType(node.type);
+      ctx.strokeStyle =
+        this.selectedNode?.id === node.id
+          ? "#d6a84f"
+          : this.hoveredNode?.id === node.id
+            ? "#ffffff"
+            : "rgba(12, 16, 20, 0.72)";
+      ctx.lineWidth = (this.selectedNode?.id === node.id ? 3 : this.hoveredNode?.id === node.id ? 2.2 : 1.1) / this.scale;
+      ctx.beginPath();
+      ctx.arc(node.x, node.y, node.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    ctx.globalAlpha = 1;
+    const labelNodes = this.nodes
+      .filter((node) => node === this.selectedNode || node === this.hoveredNode || node.degree >= 16 || (hasFilter && this.matchedNodeIds.has(node.id)))
+      .sort((a, b) => b.degree - a.degree)
+      .slice(0, hasFilter ? 80 : 42);
+    ctx.font = `${Math.max(10 / this.scale, 10)}px sans-serif`;
+    ctx.textBaseline = "middle";
+    ctx.lineJoin = "round";
+    for (const node of labelNodes) {
+      const label = node.title || node.slug;
+      const x = node.x + node.radius + 5 / this.scale;
+      const y = node.y;
+      ctx.lineWidth = 4 / this.scale;
+      ctx.strokeStyle = getComputedStyle(this.canvas).getPropertyValue("--background-primary") || "#000000";
+      ctx.fillStyle = getComputedStyle(this.canvas).getPropertyValue("--text-normal") || "#ffffff";
+      ctx.strokeText(label, x, y);
+      ctx.fillText(label, x, y);
+    }
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  private registerCanvasEvents(): void {
+    if (!this.canvas) {
+      return;
+    }
+
+    this.canvas.addEventListener("wheel", (event) => {
+      event.preventDefault();
+      const before = this.screenToGraph(event.clientX, event.clientY);
+      const direction = event.deltaY > 0 ? 0.88 : 1.12;
+      this.scale = Math.max(0.05, Math.min(5, this.scale * direction));
+      const rect = this.canvas?.getBoundingClientRect();
+      if (rect) {
+        this.panX = event.clientX - rect.left - before.x * this.scale;
+        this.panY = event.clientY - rect.top - before.y * this.scale;
+      }
+      this.drawCanvasGraph();
+    }, { passive: false });
+
+    this.canvas.addEventListener("pointerdown", (event) => {
+      const hit = this.hitTestNode(event.clientX, event.clientY);
+      if (hit) {
+        this.draggedNode = hit;
+        this.selectedNode = hit;
+        this.hoveredNode = hit;
+        this.renderDetails(hit);
+      } else {
+        this.pointerStart = {
+          x: event.clientX,
+          y: event.clientY,
+          panX: this.panX,
+          panY: this.panY
+        };
+      }
+      this.canvas?.setPointerCapture(event.pointerId);
+      this.drawCanvasGraph();
+    });
+
+    this.canvas.addEventListener("pointermove", (event) => {
+      if (this.draggedNode) {
+        const point = this.screenToGraph(event.clientX, event.clientY);
+        this.draggedNode.x = point.x;
+        this.draggedNode.y = point.y;
+        this.drawCanvasGraph();
+        return;
+      }
+
+      if (this.pointerStart) {
+        this.panX = this.pointerStart.panX + event.clientX - this.pointerStart.x;
+        this.panY = this.pointerStart.panY + event.clientY - this.pointerStart.y;
+        this.drawCanvasGraph();
+        return;
+      }
+
+      const hit = this.hitTestNode(event.clientX, event.clientY);
+      if (hit?.id !== this.hoveredNode?.id) {
+        this.hoveredNode = hit;
+        this.canvas?.toggleClass("is-hovering-node", Boolean(hit));
+        this.drawCanvasGraph();
+      }
+    });
+
+    this.canvas.addEventListener("pointerup", (event) => {
+      this.pointerStart = null;
+      this.draggedNode = null;
+      this.canvas?.releasePointerCapture(event.pointerId);
+    });
+
+    this.canvas.addEventListener("pointerleave", () => {
+      this.pointerStart = null;
+      this.draggedNode = null;
+      this.hoveredNode = null;
+      this.canvas?.removeClass("is-hovering-node");
+      this.drawCanvasGraph();
+    });
+
+    this.canvas.addEventListener("dblclick", (event) => {
+      const hit = this.hitTestNode(event.clientX, event.clientY);
+      if (hit) {
+        event.preventDefault();
+        void this.plugin.openDocument(hit.slug);
+      }
+    });
+
+    this.registerDomEvent(window, "resize", () => this.drawCanvasGraph());
+  }
+
+  private hitTestNode(clientX: number, clientY: number): ForceNode | null {
+    const point = this.screenToGraph(clientX, clientY);
+    const query = this.searchInput?.getValue().trim() ?? "";
+    const hasFilter = query.length > 0;
+    let best: ForceNode | null = null;
+    let bestDistance = Number.POSITIVE_INFINITY;
+
+    for (const node of this.nodes) {
+      if (hasFilter && !this.matchedNodeIds.has(node.id)) {
+        continue;
+      }
+      const dx = point.x - node.x;
+      const dy = point.y - node.y;
+      const limit = node.radius + 7 / this.scale;
+      const distance = dx * dx + dy * dy;
+      if (distance <= limit * limit && distance < bestDistance) {
+        best = node;
+        bestDistance = distance;
+      }
+    }
+
+    return best;
   }
 
   private renderSvgGraph(): void {
@@ -1292,11 +1508,8 @@ class GitKbGraphView extends ItemView {
   }
 
   private applyFilter(): void {
-    if (!this.nodeLayer || !this.edgeLayer) {
-      return;
-    }
     const query = this.searchInput?.getValue().trim().toLowerCase() ?? "";
-    const matched = new Set<string>();
+    this.matchedNodeIds = new Set<string>();
 
     for (const node of this.nodes) {
       const haystack = [
@@ -1308,22 +1521,10 @@ class GitKbGraphView extends ItemView {
         ...(node.tags ?? [])
       ].filter(Boolean).join(" ").toLowerCase();
       if (!query || haystack.includes(query)) {
-        matched.add(node.id);
+        this.matchedNodeIds.add(node.id);
       }
     }
-
-    for (const circle of Array.from(this.nodeLayer.children) as SVGCircleElement[]) {
-      const id = circle.getAttribute("data-id") || "";
-      circle.toggleClass("is-dimmed", Boolean(query) && !matched.has(id));
-      circle.toggleClass("is-matched", Boolean(query) && matched.has(id));
-    }
-
-    for (const line of Array.from(this.edgeLayer.children) as SVGLineElement[]) {
-      const from = line.getAttribute("data-from") || "";
-      const to = line.getAttribute("data-to") || "";
-      const visible = !query || (matched.has(from) && matched.has(to));
-      line.toggleClass("is-dimmed", !visible);
-    }
+    this.drawCanvasGraph();
   }
 
   private renderDetails(node: ForceNode): void {
@@ -1356,24 +1557,24 @@ class GitKbGraphView extends ItemView {
   }
 
   private fitGraph(): void {
-    if (!this.svg || this.nodes.length === 0) {
+    if (!this.canvas || this.nodes.length === 0) {
       return;
     }
-    const rect = this.svg.getBoundingClientRect();
+    const rect = this.canvas.getBoundingClientRect();
     const maxX = Math.max(...this.nodes.map((node) => Math.abs(node.x) + node.radius));
     const maxY = Math.max(...this.nodes.map((node) => Math.abs(node.y) + node.radius));
     this.scale = Math.max(0.08, Math.min(1.5, Math.min(rect.width / Math.max(1, maxX * 2.3), rect.height / Math.max(1, maxY * 2.3))));
     this.panX = rect.width / 2;
     this.panY = rect.height / 2;
-    this.applyTransform();
+    this.drawCanvasGraph();
   }
 
   private applyTransform(): void {
-    this.viewport?.setAttribute("transform", `translate(${this.panX.toFixed(1)} ${this.panY.toFixed(1)}) scale(${this.scale.toFixed(3)})`);
+    this.drawCanvasGraph();
   }
 
   private screenToGraph(clientX: number, clientY: number): { x: number; y: number } {
-    const rect = this.svg?.getBoundingClientRect();
+    const rect = this.canvas?.getBoundingClientRect();
     if (!rect) {
       return { x: 0, y: 0 };
     }
@@ -1401,6 +1602,23 @@ function typeColors(): Record<string, string> {
 function colorForType(type?: string | null): string {
   const colors = typeColors();
   return colors[type || "document"] ?? "#a7b0bd";
+}
+
+function colorForRelation(type?: string | null): string {
+  switch (type) {
+    case "blocks":
+    case "blocked_by":
+      return "rgba(230, 107, 91, 0.72)";
+    case "implements":
+      return "rgba(214, 168, 79, 0.72)";
+    case "depends_on":
+      return "rgba(77, 163, 255, 0.62)";
+    case "parent":
+    case "parent_of":
+      return "rgba(89, 195, 176, 0.64)";
+    default:
+      return "rgba(167, 176, 189, 0.52)";
+  }
 }
 
 function graphEdgeKey(edge: GitKbGraphEdge): string {
