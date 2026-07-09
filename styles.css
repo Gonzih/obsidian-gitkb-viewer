@@ -1,0 +1,132 @@
+.gitkb-viewer-root {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  padding: 12px;
+}
+
+.gitkb-viewer-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gitkb-viewer-search {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.gitkb-viewer-list {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 0;
+  overflow: auto;
+}
+
+.gitkb-viewer-group {
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 8px;
+}
+
+.gitkb-viewer-group-title {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-weight: var(--font-semibold);
+  margin-bottom: 4px;
+  text-transform: uppercase;
+}
+
+.gitkb-viewer-doc-row {
+  align-items: flex-start;
+  border-radius: 6px;
+  cursor: pointer;
+  display: grid;
+  gap: 2px;
+  grid-template-columns: minmax(0, 1fr);
+  padding: 6px 8px;
+}
+
+.gitkb-viewer-doc-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.gitkb-viewer-doc-title {
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitkb-viewer-doc-meta {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gitkb-viewer-document {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  height: 100%;
+  min-height: 0;
+  padding: 14px 18px;
+}
+
+.gitkb-viewer-doc-header {
+  border-bottom: 1px solid var(--background-modifier-border);
+  display: grid;
+  gap: 8px;
+  padding-bottom: 10px;
+}
+
+.gitkb-viewer-doc-heading {
+  color: var(--text-normal);
+  font-size: var(--font-ui-large);
+  font-weight: var(--font-semibold);
+  line-height: 1.3;
+}
+
+.gitkb-viewer-doc-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.gitkb-viewer-markdown {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.gitkb-viewer-empty,
+.gitkb-viewer-error,
+.gitkb-viewer-loading {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  color: var(--text-muted);
+  padding: 12px;
+}
+
+.gitkb-viewer-error {
+  border-color: var(--text-error);
+  color: var(--text-error);
+  white-space: pre-wrap;
+}
+
+.gitkb-viewer-pill {
+  background: var(--background-secondary);
+  border-radius: 999px;
+  color: var(--text-muted);
+  display: inline-block;
+  font-size: var(--font-ui-smaller);
+  margin-right: 6px;
+  padding: 2px 8px;
+}

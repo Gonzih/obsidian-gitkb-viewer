@@ -1,0 +1,8 @@
+src/
+scripts/
+esbuild.config.mjs
+tsconfig.json
+node_modules/
+.git/
+.github/
+*.tgz

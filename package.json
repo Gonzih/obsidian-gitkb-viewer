@@ -1,0 +1,48 @@
+{
+  "name": "obsidian-gitkb-viewer",
+  "version": "0.1.0",
+  "description": "View-only GitKB browser for Obsidian.",
+  "main": "main.js",
+  "scripts": {
+    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "dev": "node esbuild.config.mjs",
+    "typecheck": "tsc -noEmit -skipLibCheck",
+    "smoke": "node scripts/verify-readonly.mjs && node scripts/smoke.mjs",
+    "prepack": "npm run build",
+    "prepublishOnly": "npm run build && npm run smoke"
+  },
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "gitkb",
+    "knowledge-base",
+    "viewer",
+    "readonly"
+  ],
+  "author": "Gonzih",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Gonzih/obsidian-gitkb-viewer.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Gonzih/obsidian-gitkb-viewer/issues"
+  },
+  "homepage": "https://github.com/Gonzih/obsidian-gitkb-viewer#readme",
+  "files": [
+    "main.js",
+    "manifest.json",
+    "styles.css",
+    "versions.json",
+    "README.md",
+    "LICENSE"
+  ],
+  "devDependencies": {
+    "@types/node": "^24.0.10",
+    "builtin-modules": "^5.0.0",
+    "esbuild": "^0.25.6",
+    "obsidian": "^1.8.7",
+    "tslib": "^2.8.1",
+    "typescript": "^5.8.3"
+  }
+}

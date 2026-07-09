@@ -1,0 +1,10 @@
+{
+  "id": "gitkb-viewer",
+  "name": "GitKB Viewer",
+  "version": "0.1.0",
+  "minAppVersion": "1.5.0",
+  "description": "View-only browser for GitKB documents inside Obsidian.",
+  "author": "Gonzih",
+  "authorUrl": "https://github.com/Gonzih",
+  "isDesktopOnly": true
+}
